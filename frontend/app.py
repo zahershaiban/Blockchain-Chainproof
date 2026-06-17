@@ -59,6 +59,31 @@ st.header("Registered Model Metadata")
 # Displays the metadata JSON in the UI.
 st.json(hashes)
 
+
+# Optional blockchain deployment information for the presentation demo.
+deployment_path = ARTIFACTS_DIR / "deployment-latest.json"
+registration_path = ARTIFACTS_DIR / "last-registration.json"
+
+st.header("Blockchain Registry Status")
+
+if deployment_path.exists():
+    with open(deployment_path, "r", encoding="utf-8") as file:
+        deployment = json.load(file)
+    st.write("Deployment information:")
+    st.json(deployment)
+    if deployment.get("explorerUrl"):
+        st.link_button("Open contract on explorer", deployment["explorerUrl"])
+else:
+    st.info("No blockchain deployment file found yet. Run the Hardhat deployment script first.")
+
+if registration_path.exists():
+    with open(registration_path, "r", encoding="utf-8") as file:
+        registration = json.load(file)
+    st.write("Last on-chain registration:")
+    st.json(registration)
+else:
+    st.info("No on-chain registration file found yet. Run backend/register_model.py first.")
+
 # Shows a section title for row verification.
 st.header("Verify One Dataset Row")
 

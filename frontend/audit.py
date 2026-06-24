@@ -87,26 +87,128 @@ def verify_row_against_root(rows: list[str], row_index: int, root: str):
     return row, proof, is_valid
 
 
-def load_registered_leaves(expected_root: str | None = None):
-    """Laedt registrierte Blatt-Hashes aus artifacts/dataset_merkle.json.
+def load_registered_merkle_data(expected_root: str | None = None):
+    """Loads the registered Merkle tree from artifacts/dataset_merkle.json.
 
-    Nur vertrauenswuerdig, wenn der gespeicherte Root mit dem on-chain-Root
-    uebereinstimmt. Gibt (leaves, root) zurueck oder None, wenn nicht verfuegbar
-    bzw. inkonsistent.
+    This file is trusted only if its stored root matches the on-chain root.
+    It contains the original tree that was created when the model was registered.
     """
     if not MERKLE_PATH.exists():
         return None
+
     try:
         data = json.loads(MERKLE_PATH.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
-    leaves = data.get("leaves")
+
     root = data.get("merkle_root")
-    if not leaves or not root:
+    leaves = data.get("leaves")
+    tree = data.get("tree")
+
+    if not root or not leaves or not tree:
         return None
+
     if expected_root and root.lower() != expected_root.lower():
         return None
-    return leaves, root
+
+    return {
+        "root": root,
+        "leaves": leaves,
+        "tree": tree,
+        "leaf_count": data.get("leaf_count", len(leaves)),
+    }
+
+
+def load_registered_leaves(expected_root: str | None = None):
+    """Keeps the old function working for the row-difference table."""
+    data = load_registered_merkle_data(expected_root)
+
+    if data is None:
+        return None
+
+    return data["leaves"], data["root"]
+
+
+def generate_merkle_proof_from_saved_tree(tree: list[list[str]], row_index: int):
+    """Generates a Merkle proof from the saved original Merkle tree.
+
+    Important:
+    This does NOT use the uploaded dataset.
+    It uses the registered/original tree from artifacts/dataset_merkle.json.
+    """
+    if not tree or not tree[0]:
+        raise AuditError("Gespeicherter Merkle Tree ist leer oder ungueltig.")
+
+    if row_index < 0 or row_index >= len(tree[0]):
+        raise AuditError(
+            f"Zeilenindex {row_index} liegt ausserhalb des registrierten Bereichs "
+            f"0..{len(tree[0]) - 1}."
+        )
+
+    proof = []
+    index = row_index
+
+    for level in tree[:-1]:
+        if index % 2 == 0:
+            sibling_index = index + 1
+            position = "right"
+        else:
+            sibling_index = index - 1
+            position = "left"
+
+        if sibling_index >= len(level):
+            sibling_hash = level[index]
+        else:
+            sibling_hash = level[sibling_index]
+
+        proof.append({
+            "position": position,
+            "hash": sibling_hash,
+        })
+
+        index = index // 2
+
+    return proof
+
+
+def verify_uploaded_row_against_registered_tree(
+        uploaded_rows: list[str],
+        row_index: int,
+        expected_root: str,
+):
+    """Verifies one uploaded row using the registered/original Merkle proof.
+
+    This answers the correct question:
+    Does this uploaded row at this index match the row that was originally registered?
+    """
+    if row_index < 0 or row_index >= len(uploaded_rows):
+        raise AuditError(
+            f"Zeilenindex {row_index} liegt ausserhalb der hochgeladenen Datei "
+            f"0..{len(uploaded_rows) - 1}."
+        )
+
+    registered = load_registered_merkle_data(expected_root)
+
+    if registered is None:
+        raise AuditError(
+            "Einzelzeilen-Verifikation nicht moeglich: "
+            "dataset_merkle.json fehlt oder passt nicht zum registrierten Root."
+        )
+
+    if row_index >= len(registered["leaves"]):
+        raise AuditError(
+            f"Zeilenindex {row_index} existiert nicht im registrierten Datensatz."
+        )
+
+    uploaded_row = uploaded_rows[row_index]
+    proof = generate_merkle_proof_from_saved_tree(registered["tree"], row_index)
+
+    uploaded_leaf = sha256(uploaded_row)
+    registered_leaf = registered["leaves"][row_index]
+
+    is_valid = verify_merkle_proof(uploaded_row, proof, expected_root)
+
+    return uploaded_row, proof, is_valid, uploaded_leaf, registered_leaf
 
 
 def diff_rows_against_leaves(rows: list[str], registered_leaves: list[str]) -> list[dict]:

@@ -60,13 +60,17 @@ def render_proof_result(label: str, expected: str, computed: str):
     """Zeigt erwarteten Wert, berechneten Wert und Status fuer einen Beweis."""
     match = hashes_match(expected, computed)
     st.markdown(f"**{label}** — {'✅ uebereinstimmend' if match else '❌ abweichend'}")
+
     left, right = st.columns(2)
+
     with left:
         st.caption("Erwartet (on-chain / Fallback)")
         st.code(expected or "(nicht verfuegbar)", language="text")
+
     with right:
         st.caption("Neu berechnet")
         st.code(computed or "(nicht verfuegbar)", language="text")
+
     return match
 
 
@@ -76,10 +80,11 @@ HASHES_LOCAL = read_json(ARTIFACTS_DIR / "hashes.json")
 DEPLOYMENT_LOCAL = read_json(ARTIFACTS_DIR / "deployment-latest.json")
 
 MODEL_NAME = (
-    LAST_REG.get("modelName")
-    or HASHES_LOCAL.get("model_name")
-    or "Health Risk Classifier"
+        LAST_REG.get("modelName")
+        or HASHES_LOCAL.get("model_name")
+        or "Health Risk Classifier"
 )
+
 RECORD_ID = LAST_REG.get("recordId") or HASHES_LOCAL.get("record_id")
 
 
@@ -101,9 +106,11 @@ def load_state() -> dict:
         "contract": None,
         "record": None,
     }
+
     try:
         web3, contract, address, rpc = chain.connect()
         record = chain.get_latest_model(contract, MODEL_NAME)
+
         state.update(
             connected=True,
             address=address,
@@ -118,8 +125,10 @@ def load_state() -> dict:
             },
             source="chain",
         )
+
     except Exception as exc:  # bewusst breit: jede Stoerung -> Fallback
         state["error"] = str(exc)
+
         if HASHES_LOCAL:
             state["expected"] = {
                 "dataset_merkle_root": HASHES_LOCAL.get("dataset_merkle_root"),
@@ -127,6 +136,7 @@ def load_state() -> dict:
                 "config_hash": HASHES_LOCAL.get("config_hash"),
             }
             state["source"] = "fallback"
+
     return state
 
 
@@ -150,9 +160,8 @@ if STATE["source"] == "chain":
         f"{STATE['address']}. Erwartete Werte werden on-chain gelesen."
     )
 else:
-    st.error(
-        "Keine Chain-Verbindung. " + (STATE["error"] or "")
-    )
+    st.error("Keine Chain-Verbindung. " + (STATE["error"] or ""))
+
     if STATE["source"] == "fallback":
         st.warning(
             "⚠️ FALLBACK aktiv: Erwartete Werte stammen aus der lokalen "
@@ -165,8 +174,14 @@ else:
             "erwarteten Werte angezeigt werden."
         )
 
+
 tab_overview, tab_dataset, tab_model, tab_status = st.tabs(
-    ["Registry-Uebersicht", "Dataset-Audit", "Modell- & Config-Audit", "On-Chain-Status"]
+    [
+        "Registry-Uebersicht",
+        "Dataset-Audit",
+        "Modell- & Config-Audit",
+        "On-Chain-Status",
+    ]
 )
 
 
@@ -198,24 +213,36 @@ with tab_overview:
             {"Beweis": "config_hash", "Wert": record["configHash"]},
         ]
         st.dataframe(proof_rows, hide_index=True, use_container_width=True)
+
     elif STATE["source"] == "fallback":
         st.warning(
             "⚠️ FALLBACK: Anzeige aus lokaler hashes.json (nicht on-chain bestaetigt)."
         )
+
         col1, col2 = st.columns(2)
         col1.metric("Modell", HASHES_LOCAL.get("model_name", "—"))
         col2.metric("Version", HASHES_LOCAL.get("version", "—"))
+
         st.subheader("Beweise (lokal, ungeprueft)")
         st.dataframe(
             [
-                {"Beweis": "dataset_merkle_root",
-                 "Wert": HASHES_LOCAL.get("dataset_merkle_root", "—")},
-                {"Beweis": "model_hash", "Wert": HASHES_LOCAL.get("model_hash", "—")},
-                {"Beweis": "config_hash", "Wert": HASHES_LOCAL.get("config_hash", "—")},
+                {
+                    "Beweis": "dataset_merkle_root",
+                    "Wert": HASHES_LOCAL.get("dataset_merkle_root", "—"),
+                },
+                {
+                    "Beweis": "model_hash",
+                    "Wert": HASHES_LOCAL.get("model_hash", "—"),
+                },
+                {
+                    "Beweis": "config_hash",
+                    "Wert": HASHES_LOCAL.get("config_hash", "—"),
+                },
             ],
             hide_index=True,
             use_container_width=True,
         )
+
     else:
         st.info("Keine Registrierungsdaten verfuegbar.")
 
@@ -226,9 +253,9 @@ with tab_overview:
 with tab_dataset:
     st.header("Dataset-Audit (Merkle-Root)")
     st.write(
-        "Lade `health_dataset_1000.csv` hoch. Der Merkle-Root wird neu berechnet "
-        "und gegen den registrierten Root verglichen. Die Kopfzeile ist Blatt 0, "
-        "Zeile 1 ist der erste Datensatz (P0001)."
+        "Lade die registrierte CSV oder eine manipulierte CSV hoch. Der Merkle-Root "
+        "wird neu berechnet und gegen den registrierten Root verglichen. "
+        "Die Kopfzeile ist Blatt 0, Zeile 1 ist der erste Datensatz."
     )
 
     expected_root = expected_value("dataset_merkle_root")
@@ -236,22 +263,26 @@ with tab_dataset:
     use_tamper = st.toggle(
         "Tamper-Demo: manipulierte Datei (data/tampered_dataset.csv) verwenden"
     )
+
     uploaded = st.file_uploader("Dataset-CSV hochladen", type=["csv"], key="ds")
 
     data = None
     source_label = None
+
     if use_tamper:
         if TAMPERED_PATH.exists():
             data = TAMPERED_PATH.read_bytes()
             source_label = "data/tampered_dataset.csv (Tamper-Demo)"
         else:
             st.error("data/tampered_dataset.csv nicht gefunden.")
+
     elif uploaded is not None:
         data = uploaded.getvalue()
         source_label = uploaded.name
 
     if data is not None:
         st.caption(f"Geprueft wird: {source_label}")
+
         try:
             rows = audit.load_csv_rows_from_bytes(data)
         except audit.AuditError as exc:
@@ -261,31 +292,45 @@ with tab_dataset:
         if rows is not None:
             # Sanity-Check zuerst (erklaert WARUM, statt nur 'fehlgeschlagen').
             ok, messages = audit.sanity_check(rows)
+
             if not ok:
                 for msg in messages:
                     st.warning(msg)
 
-            # --- Ganzdatei-Abgleich ---
+            # ---------------------------------------------------------------- #
+            # Ganzdatei-Abgleich
+            # ---------------------------------------------------------------- #
             st.subheader("Ganzdatei-Abgleich")
+
             computed_root = audit.get_merkle_root(rows)
             render_proof_result("dataset_merkle_root", expected_root, computed_root)
-            if hashes_match(expected_root, computed_root):
+
+            whole_dataset_matches = hashes_match(expected_root, computed_root)
+
+            if whole_dataset_matches:
                 st.success("Der komplette Datensatz entspricht dem registrierten Root.")
             else:
                 st.error("Der Datensatz weicht vom registrierten Root ab.")
 
-            # --- Welche Zeilen weichen ab? (gegen registrierte Blaetter) ---
+            # ---------------------------------------------------------------- #
+            # Welche Zeilen weichen ab?
+            # ---------------------------------------------------------------- #
             registered = audit.load_registered_leaves(expected_root)
+
             if registered is not None:
                 leaves, _ = registered
                 diffs = audit.diff_rows_against_leaves(rows, leaves)
+
                 if diffs:
                     st.error(f"{len(diffs)} abweichende Zeile(n) gefunden:")
+
                     st.dataframe(
                         [
-                            {"Zeilenindex": d["index"],
-                             "patient_id": d["patient_id"],
-                             "Status": "geaendert/fehlt"}
+                            {
+                                "Zeilenindex": d["index"],
+                                "patient_id": d["patient_id"],
+                                "Status": "geaendert/fehlt",
+                            }
                             for d in diffs
                         ],
                         hide_index=True,
@@ -293,15 +338,33 @@ with tab_dataset:
                     )
                 else:
                     st.info("Zeilenweiser Abgleich: keine Abweichungen.")
+
             else:
                 st.caption(
-                    "Zeilenweiser Abgleich nicht moeglich (dataset_merkle.json fehlt "
-                    "oder ist nicht mit dem on-chain-Root konsistent)."
+                    "Zeilenweiser Abgleich nicht moeglich "
+                    "(dataset_merkle.json fehlt oder ist nicht mit dem "
+                    "registrierten Root konsistent)."
                 )
 
-            # --- Einzelzeilen-Verifikation mit Merkle-Proof ---
+            # ---------------------------------------------------------------- #
+            # Einzelzeilen-Verifikation mit Merkle-Proof
+            #
+            # Wichtig:
+            # Der Proof wird aus dem registrierten/originalen Merkle Tree geladen,
+            # nicht aus dem hochgeladenen Datensatz. Dadurch kann eine einzelne
+            # unveraenderte Zeile auch dann erfolgreich sein, wenn eine andere
+            # Zeile im hochgeladenen Datensatz manipuliert wurde.
+            # ---------------------------------------------------------------- #
             st.subheader("Einzelzeilen-Verifikation (Merkle-Proof)")
+
+            st.info(
+                "Diese Pruefung verwendet die ausgewaehlte Zeile aus der "
+                "hochgeladenen Datei, aber den Merkle-Proof aus dem registrierten "
+                "Original-Merkle-Tree (`artifacts/dataset_merkle.json`)."
+            )
+
             max_index = len(rows) - 1
+
             row_index = st.number_input(
                 "Zu pruefender Zeilenindex (0 = Kopfzeile)",
                 min_value=0,
@@ -309,26 +372,60 @@ with tab_dataset:
                 value=min(1, max_index),
                 step=1,
             )
+
             try:
-                row, proof, is_valid = audit.verify_row_against_root(
-                    rows, int(row_index), expected_root
+                (
+                    row,
+                    proof,
+                    is_valid,
+                    uploaded_leaf,
+                    registered_leaf,
+                ) = audit.verify_uploaded_row_against_registered_tree(
+                    rows,
+                    int(row_index),
+                    expected_root,
                 )
+
                 patient_id = row.split(",")[0]
+
                 st.caption(f"Ausgewaehlte Zeile (patient_id: {patient_id})")
                 st.code(row, language="text")
+
+                left, right = st.columns(2)
+
+                with left:
+                    st.caption("Hash der hochgeladenen Zeile")
+                    st.code(uploaded_leaf, language="text")
+
+                with right:
+                    st.caption("Registrierter Zeilen-Hash")
+                    st.code(registered_leaf, language="text")
+
                 if is_valid:
                     st.success(
-                        "Verifiziert: diese Zeile gehoert zum registrierten Datensatz."
+                        "Verifiziert: diese konkrete Zeile stimmt mit dem "
+                        "registrierten Originaldatensatz ueberein."
                     )
+
+                    if not whole_dataset_matches:
+                        st.info(
+                            "Hinweis: Der komplette Datensatz weicht ab, aber diese "
+                            "einzelne ausgewaehlte Zeile ist unveraendert. "
+                            "Die tatsaechlich abweichende Zeile steht oben in der "
+                            "Abweichungstabelle."
+                        )
                 else:
                     st.error(
-                        "Verifikation fehlgeschlagen: Zeile oder Datensatz wurde "
-                        "veraendert."
+                        "Verifikation fehlgeschlagen: diese konkrete Zeile stimmt "
+                        "nicht mit dem registrierten Originaldatensatz ueberein."
                     )
+
                 with st.expander("Merkle-Proof anzeigen"):
                     st.json(proof)
+
             except audit.AuditError as exc:
                 st.error(str(exc))
+
     else:
         st.info("Bitte eine CSV hochladen oder die Tamper-Demo aktivieren.")
 
@@ -348,16 +445,20 @@ with tab_model:
 
     st.subheader("model_hash")
     model_file = st.file_uploader("model.pkl hochladen", type=None, key="model")
+
     if model_file is not None:
         try:
             computed = audit.sha256_bytes(model_file.getvalue())
             render_proof_result("model_hash", expected_model, computed)
+
             if hashes_match(expected_model, computed):
                 st.success("model.pkl ist unveraendert.")
             else:
                 st.error("model.pkl weicht vom registrierten Hash ab.")
+
         except audit.AuditError as exc:
             st.error(str(exc))
+
     else:
         st.info("Noch keine model.pkl hochgeladen.")
 
@@ -365,14 +466,17 @@ with tab_model:
 
     st.subheader("config_hash")
     config_file = st.file_uploader("config.json hochladen", type=["json"], key="config")
+
     if config_file is not None:
         try:
             computed = audit.sha256_bytes(config_file.getvalue())
             match = render_proof_result("config_hash", expected_config, computed)
+
             if match:
                 st.success("config.json ist unveraendert.")
             else:
                 st.error("config.json weicht vom registrierten Hash ab.")
+
                 # Konditionaler Hinweis auf die bekannte Backend-Inkonsistenz.
                 # Das Ergebnis wird NICHT verfaelscht - nur erklaert.
                 st.warning(
@@ -382,8 +486,10 @@ with tab_model:
                     "hash_files.py erneut ausfuehren und das Modell neu registrieren. "
                     "Das angezeigte Pruefergebnis bleibt unveraendert ehrlich."
                 )
+
         except audit.AuditError as exc:
             st.error(str(exc))
+
     else:
         st.info("Noch keine config.json hochgeladen.")
 
@@ -395,19 +501,23 @@ with tab_status:
     st.header("On-Chain-Status")
 
     col1, col2 = st.columns(2)
+
     with col1:
         st.metric("RPC-Knoten erreichbar", "Ja" if STATE["connected"] else "Nein")
         st.metric("ABI kompiliert", "Ja" if STATE["abi_available"] else "Nein")
+
     with col2:
         network = DEPLOYMENT_LOCAL.get("network", "—")
         st.metric("Netzwerk", network)
         st.metric("RPC-URL", STATE["rpc"])
 
     address = STATE["address"] or DEPLOYMENT_LOCAL.get("contractAddress")
+
     st.write("**Contract-Adresse:**")
     st.code(address or "(unbekannt)", language="text")
 
     explorer_url = DEPLOYMENT_LOCAL.get("explorerUrl")
+
     if explorer_url:
         st.link_button("Contract im Explorer oeffnen", explorer_url)
     else:
@@ -418,6 +528,7 @@ with tab_status:
             "Contract-ABI fehlt. Einmalig kompilieren (in contracts/): "
             "npm install && npx hardhat compile."
         )
+
     if not STATE["connected"] and STATE["error"]:
         st.error(STATE["error"])
 
@@ -425,22 +536,27 @@ with tab_status:
         try:
             info = chain.chain_info(STATE["web3"])
             records = chain.list_records(STATE["contract"])
+
             col_a, col_b, col_c = st.columns(3)
             col_a.metric("Chain-ID", info["chainId"])
             col_b.metric("Block", info["blockNumber"])
             col_c.metric("Registrierungen gesamt", records["total"])
+
             if records["ids"]:
                 st.write("**Alle Record-IDs:**")
+
                 st.dataframe(
                     [{"recordId": rid} for rid in records["ids"]],
                     hide_index=True,
                     use_container_width=True,
                 )
+
         except Exception as exc:  # Lesefehler nicht als Stacktrace zeigen
             st.error(f"On-chain-Lesefehler: {exc}")
 
     if LAST_REG:
         st.subheader("Letzte Registrierung (lokal protokolliert)")
+
         st.dataframe(
             [{"Feld": k, "Wert": str(v)} for k, v in LAST_REG.items()],
             hide_index=True,

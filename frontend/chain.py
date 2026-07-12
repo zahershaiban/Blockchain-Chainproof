@@ -93,7 +93,7 @@ def connect():
     web3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 5}))
     if not web3.is_connected():
         raise NodeConnectionError(
-            f"Kein Kontakt zum RPC-Knoten unter {rpc_url}. Laeuft der Hardhat-Node? "
+            f"Kein Kontakt zum RPC-Knoten unter {rpc_url}. Läuft der Hardhat-Node? "
             f"Starten (in contracts/): npx hardhat node"
         )
     contract = web3.eth.contract(address=Web3.to_checksum_address(address), abi=abi)

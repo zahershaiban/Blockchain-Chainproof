@@ -60,7 +60,7 @@ def load_csv_rows_from_bytes(data: bytes) -> list[str]:
         ) from exc
     rows = [",".join(row) for row in csv.reader(io.StringIO(text))]
     if not rows:
-        raise AuditError("Die CSV-Datei enthaelt keine Zeilen.")
+        raise AuditError("Die CSV-Datei enthält keine Zeilen.")
     return rows
 
 
@@ -79,7 +79,7 @@ def verify_row_against_root(rows: list[str], row_index: int, root: str):
     """
     if row_index < 0 or row_index >= len(rows):
         raise AuditError(
-            f"Zeilenindex {row_index} liegt ausserhalb des Bereichs 0..{len(rows) - 1}."
+            f"Zeilenindex {row_index} liegt außerhalb des Bereichs 0..{len(rows) - 1}."
         )
     row = rows[row_index]
     proof = generate_merkle_proof(rows, row_index)
@@ -161,8 +161,8 @@ def sanity_check(rows: list[str]):
     if expected_count is not None and len(rows) != expected_count:
         messages.append(
             f"Zeilenzahl weicht ab: erwartet {expected_count} (inkl. Kopfzeile), "
-            f"erhalten {len(rows)}. Moegliche Ursache: falsche/abgeschnittene Datei "
-            f"oder Excel-Reexport, der Zeilen hinzufuegt oder entfernt."
+            f"erhalten {len(rows)}. Mögliche Ursache: falsche/abgeschnittene Datei "
+            f"oder Excel-Reexport, der Zeilen hinzufügt oder entfernt."
         )
 
     if expected_header is not None and rows:
@@ -170,9 +170,9 @@ def sanity_check(rows: list[str]):
         if uploaded_header != expected_header:
             messages.append(
                 "Kopfzeile/Spalten weichen vom registrierten Datensatz ab "
-                f"(erwartet: {','.join(expected_header)}). Excel-Reexporte aendern "
-                "haeufig Spaltenreihenfolge, Quoting oder Zeilenenden - dann schlaegt "
-                "die Pruefung fehl, obwohl die Daten unveraendert sind."
+                f"(erwartet: {','.join(expected_header)}). Excel-Reexporte ändern "
+                "häufig Spaltenreihenfolge, Quoting oder Zeilenenden - dann schlägt "
+                "die Prüfung fehl, obwohl die Daten unverändert sind."
             )
 
     if rows:

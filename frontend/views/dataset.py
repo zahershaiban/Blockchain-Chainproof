@@ -48,9 +48,7 @@ def render(state: dict) -> None:
     data, source_label = _load_data(state)
 
     if data is None:
-        ui.empty_state(
-            "Noch keine Datei ausgewählt — CSV hochladen oder Tamper-Demo aktivieren."
-        )
+        ui.empty_state("Bitte eine CSV hochladen oder die Tamper-Demo aktivieren.")
         return
 
     ui.file_summary(source_label, len(data))
@@ -129,6 +127,14 @@ def render(state: dict) -> None:
 
     # --- Einzelzeilen-Verifikation mit Merkle-Proof ---
     st.subheader("Einzelzeilen-Verifikation (Merkle-Proof)")
+    if not expected_root:
+        # Ohne Referenz-Root ist jede Proof-Prüfung definitionsgemäß unmöglich —
+        # ehrlich als 'unbestätigt' ausweisen statt fälschlich als Manipulation.
+        ui.verdict(
+            fmt.UNVERIFIED,
+            "Kein Referenzwert verfügbar — Einzelzeilen-Verifikation nicht möglich.",
+        )
+        return
 
     def _row_label(i: int) -> str:
         pid = rows[i].split(",")[0]

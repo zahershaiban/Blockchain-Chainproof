@@ -48,6 +48,7 @@ def derive_status(expected: str, computed: str, source: str) -> str:
 
 def truncate_middle(value: str, prefix: int = 6, suffix: int = 6) -> str:
     """Kürzt lange Hashes mittig: 'a1b2c3…9f8e7d'. Kurze Werte unverändert."""
+    # +1: Platz für das einzelne Ellipsen-Zeichen (U+2026).
     if not value or len(value) <= prefix + suffix + 1:
         return value or ""
     return f"{value[:prefix]}…{value[-suffix:]}"
@@ -75,8 +76,8 @@ def format_timestamp(ts) -> str:
 
 
 def format_bytes(num) -> str:
-    """Dateigröße lesbar (B/KB/MB/GB)."""
+    """Dateigröße lesbar (B/KB/MB/GB). Erwartet eine Zahl >= 0 (kein None)."""
     for unit in ("B", "KB", "MB", "GB"):
-        if num < 1024 or unit == "GB":
+        if unit == "GB" or num < 1024:
             return f"{num:.0f} {unit}" if unit == "B" else f"{num:.1f} {unit}"
         num /= 1024

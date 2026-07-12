@@ -31,6 +31,10 @@ class TestDeriveStatus:
         assert fmt.derive_status("", "abc", "chain") == fmt.UNVERIFIED
         assert fmt.derive_status("abc", "", "chain") == fmt.UNVERIFIED
 
+    def test_unbekannte_quelle_ist_nie_verified(self):
+        assert fmt.derive_status("abc", "abc", None) == fmt.UNVERIFIED
+        assert fmt.derive_status("abc", "abc", "") == fmt.UNVERIFIED
+
 
 class TestTruncateMiddle:
     def test_langer_hash_wird_mittig_gekuerzt(self):
@@ -62,3 +66,25 @@ class TestFormatBytes:
 
     def test_kilobytes(self):
         assert fmt.format_bytes(2048) == "2.0 KB"
+
+    def test_null_bytes(self):
+        assert fmt.format_bytes(0) == "0 B"
+
+    def test_grenzwert_1023_bleibt_bytes(self):
+        assert fmt.format_bytes(1023) == "1023 B"
+
+    def test_grenzwert_1024_wird_kb(self):
+        assert fmt.format_bytes(1024) == "1.0 KB"
+
+    def test_gigabyte_obergrenze(self):
+        assert fmt.format_bytes(1024**3) == "1.0 GB"
+        assert fmt.format_bytes(1024**4) == "1024.0 GB"
+
+
+class TestFormatTimestamp:
+    def test_unix_sekunden_utc(self):
+        assert fmt.format_timestamp(0) == "1970-01-01 00:00:00 UTC"
+
+    def test_ungueltiger_wert_wird_string(self):
+        assert fmt.format_timestamp("kein-timestamp") == "kein-timestamp"
+        assert fmt.format_timestamp(None) == "None"

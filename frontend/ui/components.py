@@ -15,7 +15,7 @@ from ui import format as fmt
 def status_badge(status: str) -> str:
     """HTML für einen Statusbadge (Farbe + Form-Marker + Text)."""
     return (
-        f'<span class="cp-badge cp-badge--{status}">'
+        f'<span class="cp-badge cp-badge--{html.escape(status)}">'
         f'<span class="cp-marker">{fmt.BADGE_MARKER[status]}</span>'
         f"{fmt.BADGE_TEXT[status]}</span>"
     )
@@ -126,7 +126,7 @@ def status_bar(state: dict) -> None:
             "es können keine erwarteten Werte angezeigt werden."
         )
     st.markdown(
-        f'<div class="cp-statusbar cp-statusbar--{cls}">'
+        f'<div class="cp-statusbar cp-statusbar--{html.escape(cls)}">'
         f'<span class="cp-marker">{marker}</span>'
         f"<span>{html.escape(text)}</span></div>",
         unsafe_allow_html=True,
@@ -139,7 +139,7 @@ def status_bar(state: dict) -> None:
 def verdict(status: str, text: str) -> None:
     """Großes Ergebnis-Banner (Ergebnis zuerst, vor allen Details)."""
     st.markdown(
-        f'<div class="cp-verdict cp-verdict--{status}">'
+        f'<div class="cp-verdict cp-verdict--{html.escape(status)}">'
         f'<span class="cp-marker">{fmt.BADGE_MARKER[status]}</span>'
         f"<span>{fmt.BADGE_TEXT[status]} — {html.escape(text)}</span></div>",
         unsafe_allow_html=True,

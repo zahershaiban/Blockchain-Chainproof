@@ -3,3 +3,10 @@ node_modules/
 contracts/node_modules/
 .env
 contracts/.env
+
+.venv/
+__pycache__/
+contracts/artifacts/
+contracts/cache/
+.idea/
+.pytest_cache/

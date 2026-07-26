@@ -3,6 +3,6 @@
     "version": "1.0.0",
     "dataset_name": "health_dataset_1000.csv",
     "dataset_merkle_root": "2563bd2db338b0b0e41f43399683fe72ab59e2864e575a5b8539f5c90a39de24",
-    "model_hash": "81c2cefa34a4bb63bf778b908cc9e4e9bd385e40689a2b00df98f61be8d0a590",
+    "model_hash": "49dc5d23c0ff749723d2d0415d92721e74f1a0207ee2b07e00b0278810ce00a1",
     "config_hash": "33e3fb84c329e910b6de1b32720a347fec6185d1dfb4fbd54d8df636ce2ddd3e"
 }

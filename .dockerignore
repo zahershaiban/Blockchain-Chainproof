@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.venv
+venv
+__pycache__
+.pytest_cache
+.idea
+.vscode
+node_modules
+contracts/node_modules
+contracts/cache
+contracts/artifacts
+artifacts
+*.zip
+*.pdf

@@ -1,593 +1,430 @@
-# ChainProof – Tamper-Proof AI Model Registry
+# ChainProof - Tamper-Proof AI Model Registry
 
-ChainProof is a blockchain-based audit prototype for AI model training. The project proves that a model, its configuration, and its training dataset can be registered in a tamper-evident way.
+ChainProof is a small blockchain-based audit system for machine-learning models. It proves that a trained model, its training configuration, and the dataset used during training have not been silently changed after registration.
 
-The current version uses a **Merkle Tree** for the dataset. Instead of storing or rehashing the entire CSV file every time, ChainProof stores one **dataset Merkle Root**. An auditor can verify one selected row with a short Merkle proof.
+The project does **not** store private datasets or model files on the blockchain. Instead, it stores cryptographic fingerprints:
 
----
+- `model_hash` - SHA-256 hash of the trained `model.pkl`
+- `config_hash` - SHA-256 hash of the training `config.json`
+- `dataset_merkle_root` - Merkle Root calculated from all CSV dataset rows
+- metadata such as model name, version, wallet address, and timestamp
 
-## 1. What problem does ChainProof solve?
-
-Companies train AI models using datasets that may change over time. Later, an auditor may ask:
-
-- Was this model trained with the approved dataset?
-- Was a patient/transaction/training record modified after training?
-- Is the model file the same file that was originally registered?
-- Is the training configuration the same configuration used originally?
-
-A normal database can be changed later. ChainProof uses hashes, Merkle Trees, and blockchain storage to make changes detectable.
+This makes the blockchain an immutable audit log for model versions.
 
 ---
 
-## 2. Main idea
+## 1. Project Concept
 
-The program creates three important proofs:
+Companies often train many versions of AI models. Later, it can be difficult to prove which exact model, dataset, and configuration were used. Normal databases can be changed by administrators, so they are not ideal for audit evidence.
 
-1. **Dataset Merkle Root**
-   - Every CSV row is hashed.
-   - Row hashes are combined into a Merkle Tree.
-   - The final root hash represents the whole dataset.
-
-2. **Model hash**
-   - The trained `model.pkl` file is hashed with SHA-256.
-   - If the model file changes, the hash changes.
-
-3. **Config hash**
-   - The `config.json` file is hashed with SHA-256.
-   - If training settings change, the hash changes.
-
-These values are saved into:
+ChainProof solves this by registering model proofs on a blockchain:
 
 ```text
-artifacts/hashes.json
+Dataset + Model + Config
+        |
+        v
+SHA-256 Hashes + Merkle Root
+        |
+        v
+Solidity Smart Contract
+        |
+        v
+Blockchain Registry
+        |
+        v
+Frontend Verification
 ```
 
-The most important value for dataset auditing is:
-
-```text
-dataset_merkle_root
-```
+During verification, the uploaded files are hashed again. If the new values match the on-chain values, the files are authentic. If even one dataset row or one model byte changes, verification fails.
 
 ---
 
-## 3. Project structure
+## 2. Current Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Machine Learning | Python, pandas, scikit-learn | Train the health risk classifier |
+| Hashing | Python hashlib | Create SHA-256 hashes |
+| Dataset Proof | Merkle Tree | Verify dataset integrity efficiently |
+| Blockchain | Solidity, Hardhat, ethers.js | Store immutable registry records |
+| Blockchain Access | web3.py | Register and read model records from Python |
+| Frontend | Streamlit | Dashboard and verification UI |
+| Containerization | Docker, Docker Compose | Run the whole demo more easily |
+
+---
+
+## 3. Repository Structure
 
 ```text
-chainproof/
-├── artifacts/
-│   ├── config.json
-│   ├── dataset_merkle.json
-│   ├── hashes.json
-│   └── model.pkl
-│
+.
 ├── backend/
-│   ├── hash_files.py
-│   ├── merkle_tree.py
-│   ├── register_model.py
-│   ├── train_model.py
-│   └── verify_row.py
+│   ├── train_model.py       # Trains the ML model and writes model.pkl/config.json
+│   ├── hash_files.py        # Creates model/config hashes and dataset Merkle Root
+│   ├── merkle_tree.py       # Merkle Tree implementation and proof verification
+│   ├── register_model.py    # Writes the proof values to the smart contract
+│   ├── read_registry.py     # Reads registered records from the smart contract
+│   └── verify_row.py        # CLI check for row-level Merkle verification
 │
 ├── contracts/
-│   ├── contracts/
-│   │   └── ModelRegistry.sol
-│   ├── scripts/
-│   │   └── deploy.js
-│   ├── test/
-│   │   └── ModelRegistry.test.js
-│   ├── hardhat.config.js
-│   └── package.json
+│   ├── contracts/ModelRegistry.sol  # Main Solidity smart contract
+│   ├── scripts/deploy.js            # Deploys the contract and saves deployment JSON
+│   ├── test/ModelRegistry.test.js   # Hardhat unit tests
+│   ├── hardhat.config.js            # Local/Sepolia network configuration
+│   └── package.json                 # Hardhat commands and dependencies
+│
+├── frontend/
+│   ├── app.py       # Streamlit UI
+│   ├── audit.py     # Frontend hashing/Merkle verification helpers
+│   └── chain.py     # Frontend blockchain read access
 │
 ├── data/
-│   ├── dataset.csv
-│   └── health_dataset_1000.csv
+│   ├── health_dataset_1000.csv  # Main dataset
+│   └── tampered_dataset.csv     # Manipulated dataset for demo failure
 │
-├── docs/
-│   └── demo_script.md
-│
-└── frontend/
-    └── app.py
+├── artifacts/       # Generated outputs: model, hashes, Merkle tree, deployments
+├── docs/            # Planning/demo documentation
+├── Dockerfile       # Docker image definition
+├── docker-compose.yml
+├── .env.example     # Example runtime configuration
+└── README.md
 ```
 
 ---
 
-## 4. How the program works from start to finish
+## 4. Main Workflow
 
-### Step 1: Train the model
+The normal workflow is:
 
-Run:
+```text
+1. Train model
+2. Generate hashes and Merkle Root
+3. Start local blockchain
+4. Deploy smart contract
+5. Register proof values on-chain
+6. Open frontend
+7. Verify original or tampered files
+```
+
+---
+
+## 5. Run Locally Without Docker
+
+### 5.1 Prerequisites
+
+Install:
+
+- Python 3.10 or newer
+- Node.js 18 or newer
+- npm
+- Git
+
+### 5.2 Install Python Dependencies
+
+From the project root:
 
 ```bash
-python backend/train_model.py
+python -m venv .venv
+source .venv/bin/activate      # Linux/macOS
+# .venv\Scripts\activate       # Windows PowerShell
+
+pip install -r backend/requirements.txt
+pip install -r frontend/requirements.txt
 ```
 
-This script reads:
-
-```text
-data/health_dataset_1000.csv
-```
-
-It trains a Random Forest model that predicts:
-
-```text
-risk_level
-```
-
-It saves:
-
-```text
-artifacts/model.pkl
-artifacts/config.json
-```
-
-### Step 2: Hash the model, config, and dataset
-
-Run:
-
-```bash
-python backend/hash_files.py
-```
-
-This script:
-
-- loads the dataset rows,
-- creates a Merkle Tree from the rows,
-- calculates the dataset Merkle Root,
-- hashes `model.pkl`,
-- hashes `config.json`,
-- saves the results into `artifacts/hashes.json`,
-- saves the full Merkle Tree into `artifacts/dataset_merkle.json`.
-
-### Step 3: Verify one row locally
-
-Run:
-
-```bash
-python backend/verify_row.py
-```
-
-This script verifies one selected row against the Merkle Root stored in `hashes.json`.
-
-Expected result:
-
-```text
-Proof valid: True
-```
-
-### Step 4: Use the Streamlit frontend
-
-Run:
-
-```bash
-streamlit run frontend/app.py
-```
-
-The app shows the registered model metadata and allows the auditor to upload a CSV file and verify one row.
-
-### Step 5: Tampering demo
-
-Upload the original dataset:
-
-```text
-data/health_dataset_1000.csv
-```
-
-Verify row index `1`. It should pass.
-
-Then upload a tampered dataset where one value in row `1` was changed. The verification should fail.
-
-This proves that even a small dataset change produces a different Merkle proof result.
-
----
-
-## 5. Explanation of each file
-
-### `backend/train_model.py`
-
-Job: trains the machine-learning model.
-
-What it does:
-
-- Loads the health dataset with pandas.
-- Selects `risk_level` as the target label.
-- Removes identifier columns such as `patient_id` and `audit_record_id`.
-- Splits the data into training and testing sets.
-- Uses `OneHotEncoder` for categorical values.
-- Uses `RandomForestClassifier` as the model.
-- Saves the trained pipeline as `artifacts/model.pkl`.
-- Saves training metadata as `artifacts/config.json`.
-
-Important functions/objects:
-
-- `ColumnTransformer`: applies preprocessing to categorical and numeric columns.
-- `Pipeline`: combines preprocessing and model training.
-- `RandomForestClassifier`: the AI model.
-- `joblib.dump`: saves the model file.
-
----
-
-### `backend/merkle_tree.py`
-
-Job: builds and verifies Merkle Trees.
-
-This is the core security/audit logic.
-
-Functions:
-
-#### `sha256(data: str) -> str`
-
-Hashes one string using SHA-256.
-
-#### `hash_pair(left: str, right: str) -> str`
-
-Combines two child hashes into one parent hash.
-
-#### `build_merkle_tree(rows: List[str]) -> List[List[str]]`
-
-Builds the full Merkle Tree.
-
-- First level: hash of every dataset row.
-- Next levels: pairwise hashes.
-- Final level: one root hash.
-
-#### `get_merkle_root(rows: List[str]) -> str`
-
-Returns only the final root hash of the dataset.
-
-#### `generate_merkle_proof(rows: List[str], row_index: int)`
-
-Creates the proof needed to verify one row.
-
-The proof contains sibling hashes and their positions. This allows an auditor to rebuild the path from one row to the root without using the entire dataset.
-
-#### `verify_merkle_proof(row, proof, root) -> bool`
-
-Checks if a row belongs to the dataset represented by the Merkle Root.
-
-Returns:
-
-```text
-True
-```
-
-if the row is valid, otherwise:
-
-```text
-False
-```
-
-#### `save_merkle_data(rows, output_path)`
-
-Saves the full Merkle Tree to JSON for debugging and demonstration.
-
----
-
-### `backend/hash_files.py`
-
-Job: creates all audit hashes.
-
-What it creates:
-
-```text
-artifacts/hashes.json
-artifacts/dataset_merkle.json
-```
-
-What it does:
-
-- Loads the dataset rows.
-- Builds the dataset Merkle Root.
-- Hashes the trained model file.
-- Hashes the config file.
-- Saves all important values as JSON.
-- Prints an example Merkle proof.
-
-Main output:
-
-```json
-{
-  "model_name": "Health Risk Classifier",
-  "version": "1.0.0",
-  "dataset_name": "health_dataset_1000.csv",
-  "dataset_merkle_root": "...",
-  "model_hash": "...",
-  "config_hash": "..."
-}
-```
-
----
-
-### `backend/verify_row.py`
-
-Job: local command-line test for Merkle proof verification.
-
-What it does:
-
-- Loads the dataset.
-- Loads the trusted Merkle Root from `hashes.json`.
-- Selects row index `1`.
-- Generates a Merkle proof for that row.
-- Verifies the row against the trusted root.
-- Prints whether the proof is valid.
-
-This file is useful before testing the frontend.
-
----
-
-### `frontend/app.py`
-
-Job: provides the auditor web interface.
-
-What the auditor can do:
-
-- See the registered model metadata.
-- Upload a dataset CSV file.
-- Choose one row index.
-- Generate a Merkle proof for that row.
-- Verify whether the uploaded row matches the original registered dataset root.
-
-How it works:
-
-1. Loads `artifacts/hashes.json`.
-2. Reads the uploaded CSV file.
-3. Converts rows into strings.
-4. Generates a Merkle proof for the selected row.
-5. Compares the proof result with `dataset_merkle_root`.
-6. Shows success or failure.
-
----
-
-### `contracts/contracts/ModelRegistry.sol`
-
-Job: stores model audit metadata on-chain.
-
-Main structure:
-
-```solidity
-struct ModelRecord 
-```
-
-This stores:
-
-- `modelName`
-- `version`
-- `datasetMerkleRoot`
-- `modelHash`
-- `configHash`
-- `registeredBy`
-- `timestamp`
-
-Main functions:
-
-#### `registerModel(...)`
-
-Stores one model record on-chain.
-
-In the final architecture, this function should receive the Merkle Root from `hashes.json` and store it permanently.
-
-#### `getModel(recordId)`
-
-Reads a registered model record from the blockchain.
-
----
-
-### `contracts/scripts/deploy.js`
-
-Job: deploys the Solidity smart contract using Hardhat.
-
-Run it from the `contracts/` folder with:
-
-```bash
-npx hardhat run scripts/deploy.js --network localhost
-```
-
-It prints the deployed contract address.
-
----
-
-### `backend/register_model.py`
-
-Job: sends the generated hashes to the deployed smart contract.
-
-It uses:
-
-- `web3.py`
-- `.env`
-- contract ABI
-- private key
-- deployed contract address
-
-This file is for blockchain integration after the local Merkle proof and frontend demo work.
-
----
-
-## 6. How the files work together
-
-```text
-health_dataset_1000.csv
-        ↓
-train_model.py
-        ↓
-model.pkl + config.json
-        ↓
-hash_files.py
-        ↓
-hashes.json + dataset_merkle.json
-        ↓
-frontend/app.py
-        ↓
-Auditor uploads CSV and verifies one row
-```
-
-Blockchain extension:
-
-```text
-hashes.json
-        ↓
-register_model.py
-        ↓
-ModelRegistry.sol
-        ↓
-On-chain model registry
-```
-
----
-
-## 7. Why Merkle Trees are used
-
-Without Merkle Trees, an auditor would need to rehash the whole dataset.
-
-With a Merkle Tree, the auditor can verify one row using only:
-
-- the row itself,
-- a short Merkle proof,
-- the trusted Merkle Root.
-
-For 1000 rows, the proof is about 10 hashes because:
-
-```text
-log2(1000) ≈ 10
-```
-
-That is why Merkle proofs are scalable.
-
----
-
-## 8. Commands
-
-From the `chainproof/` folder:
-
-```bash
-python backend/train_model.py
-python backend/hash_files.py
-python backend/verify_row.py
-streamlit run frontend/app.py
-```
-
-For the Solidity part, from the `chainproof/contracts/` folder:
-
-```bash
-npm install
-npx hardhat compile
-npx hardhat node
-npx hardhat run scripts/deploy.js --network localhost
-```
-
----
-
-## 9. Demo script
-
-1. Train the model.
-2. Generate the Merkle Root and hashes.
-3. Open the frontend.
-4. Upload the original health dataset.
-5. Verify row index `1`.
-6. Show that verification succeeds.
-7. Upload a tampered copy of the dataset.
-8. Verify the same row index.
-9. Show that verification fails.
-10. Explain that one changed value breaks the Merkle proof.
-
----
-
-## 10. Important note for the blockchain step
-
-The local Merkle and frontend parts are working as the main MVP. The blockchain step should store this value:
-
-```text
-dataset_merkle_root
-```
-
-on-chain in `ModelRegistry.sol`.
-
-The final production-style flow is:
-
-```text
-Dataset → Merkle Root → Blockchain Registry → Auditor Verification
-```
-
----
-
-## Blockchain finalization notes
-
-The blockchain module now supports safer and more presentation-ready model registration.
-
-### Added smart contract features
-
-- Immutable record IDs: a registration cannot be overwritten.
-- Required-field validation with `require(...)` checks.
-- Model version history using `getModelHistory(modelName)`.
-- Latest-version lookup using `getLatestModel(modelName)`.
-- Registry overview using `getAllRecordIds()` and `getTotalRecords()`.
-
-### Local blockchain workflow
-
-Start a local Hardhat chain:
+### 5.3 Install Contract Dependencies
 
 ```bash
 cd contracts
 npm install
 npm run compile
-npm run node
+npm test
+cd ..
 ```
 
-Deploy in a second terminal:
+### 5.4 Create `.env`
 
-```bash
-cd contracts
-npm run deploy:local
-```
-
-Register the generated model hashes:
-
-```bash
-python backend/register_model.py
-```
-
-Read all registry data:
-
-```bash
-python backend/read_registry.py
-```
-
-### Sepolia workflow
-
-Sepolia is an Ethereum testnet. It is recommended for the final demo because it shows real blockchain deployment without real ETH costs.
-
-Create `.env` from the example:
+Copy the example file:
 
 ```bash
 cp .env.example .env
 ```
 
-Fill:
+On Windows PowerShell:
 
-```text
-SEPOLIA_RPC_URL=...
-PRIVATE_KEY=...
+```powershell
+copy .env.example .env
 ```
 
-Deploy:
+For local Hardhat testing, use:
+
+```env
+RPC_URL=http://127.0.0.1:8545
+PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
+
+This private key is the first default Hardhat local test account. It is safe only for local development. Never use it with real funds.
+
+You can also use `.env` to change the model metadata and file paths without editing the Python code. This is useful if you want to register another model, another version, or another dataset.
+
+```env
+# Model and dataset metadata used by backend/hash_files.py
+CHAINPROOF_MODEL_NAME=Health Risk Classifier
+CHAINPROOF_MODEL_VERSION=1.0.0
+CHAINPROOF_DATASET_PATH=data/health_dataset_1000.csv
+CHAINPROOF_DATASET_NAME=health_dataset_1000.csv
+
+# Generated model/config artifacts
+CHAINPROOF_MODEL_PATH=artifacts/model.pkl
+CHAINPROOF_CONFIG_PATH=artifacts/config.json
+
+# Output files generated by the hashing/Merkle step
+CHAINPROOF_HASHES_PATH=artifacts/hashes.json
+CHAINPROOF_MERKLE_PATH=artifacts/dataset_merkle.json
+
+# Example row index used only for printing a Merkle proof demo
+CHAINPROOF_EXAMPLE_ROW_INDEX=1
+```
+
+For example, to use another dataset/model, change only `.env`:
+
+```env
+CHAINPROOF_MODEL_NAME=Loan Risk Classifier
+CHAINPROOF_MODEL_VERSION=1.0.0
+CHAINPROOF_DATASET_PATH=data/loan_dataset.csv
+CHAINPROOF_DATASET_NAME=loan_dataset.csv
+```
+
+Then rerun:
+
+```bash
+python backend/hash_files.py
+python backend/register_model.py
+```
+
+So the default demo uses `Health Risk Classifier`, but the registry concept is not limited to healthcare data.
+
+### 5.5 Terminal 1 - Start Local Blockchain
 
 ```bash
 cd contracts
-npm run deploy:sepolia
+npm run node
 ```
 
-The deployment script writes the latest contract address to:
+Keep this terminal open.
+
+### 5.6 Terminal 2 - Deploy Contract
+
+```bash
+cd contracts
+npm run deploy:local
+cd ..
+```
+
+This creates files such as:
 
 ```text
+artifacts/deployment-localhost.json
 artifacts/deployment-latest.json
 ```
 
-After deployment:
+### 5.7 Train, Hash, Register, Read
+
+From the project root:
 
 ```bash
+python backend/train_model.py
+python backend/hash_files.py
 python backend/register_model.py
 python backend/read_registry.py
 ```
 
-See also:
+Expected result: the model proof is registered on the local blockchain and can be read back.
+
+### 5.8 Start Frontend
+
+```bash
+streamlit run frontend/app.py
+```
+
+Open the URL shown by Streamlit, usually:
 
 ```text
-docs/blockchain_person1_plan.md
+http://localhost:8501
 ```
+
+---
+
+## 6. Run With Docker
+
+Docker is the easiest way to run the demo because it starts the local blockchain, deploys the contract, trains the model, registers the proof, and starts the Streamlit UI.
+
+### 6.1 Build and Run With Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+```text
+http://localhost:8501
+```
+
+The Hardhat RPC is exposed at:
+
+```text
+http://localhost:8545
+```
+
+### 6.2 Run With Plain Docker
+
+```bash
+docker build -t chainproof .
+docker run --rm -p 8501:8501 -p 8545:8545 chainproof
+```
+
+### 6.3 What the Docker Container Does
+
+The container entrypoint automatically runs:
+
+```text
+1. npm install / compile smart contract
+2. start Hardhat local node
+3. deploy ModelRegistry.sol
+4. train the ML model
+5. generate hashes and Merkle Root
+6. register the proof on-chain
+7. start Streamlit frontend
+```
+
+This is intended for a local demo. For a real deployment, the blockchain node, backend, and frontend should be separated into different services.
+
+---
+
+## 7. Optional Sepolia Deployment
+
+Sepolia is an Ethereum test network. It is **not required** for the project, but it is useful for a more professional demo.
+
+To use Sepolia, add the following to `.env`:
+
+```env
+SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+PRIVATE_KEY=0xYOUR_TEST_WALLET_PRIVATE_KEY
+```
+
+Then run:
+
+```bash
+cd contracts
+npm run deploy:sepolia
+cd ..
+python backend/register_model.py
+python backend/read_registry.py
+```
+
+Important:
+
+- Use only a test wallet.
+- Never commit `.env`.
+- You need Sepolia test ETH.
+- The same contract can be deployed locally or on Sepolia.
+
+---
+
+## 8. Smart Contract Summary
+
+The main contract is:
+
+```text
+contracts/contracts/ModelRegistry.sol
+```
+
+It stores one immutable `ModelRecord` per model version:
+
+```text
+recordId
+modelName
+version
+datasetMerkleRoot
+modelHash
+configHash
+registeredBy
+timestamp
+```
+
+Important functions:
+
+| Function | Purpose |
+|---|---|
+| `registerModel(...)` | Registers one model version |
+| `exists(recordId)` | Checks if a record already exists |
+| `getModel(recordId)` | Reads one registration |
+| `getModelHistory(modelName)` | Lists all versions of one model |
+| `getLatestModel(modelName)` | Returns newest model version |
+| `getAllRecordIds()` | Lists all records for the frontend |
+| `getTotalRecords()` | Returns registry size |
+
+The contract prevents duplicate `recordId` values, so an old model version cannot be overwritten.
+
+---
+
+## 9. Frontend Usage
+
+The Streamlit app contains four main areas:
+
+1. **Registry Overview** - shows the registered model information.
+2. **Dataset Audit** - uploads a CSV and compares its Merkle Root to the registered root.
+3. **Model & Config Audit** - uploads `model.pkl` and `config.json` and compares SHA-256 hashes.
+4. **On-Chain Status** - shows RPC connection, contract address, chain ID, block number, and registered IDs.
+
+For the tamper demo, use:
+
+```text
+data/tampered_dataset.csv
+```
+
+The expected result is verification failure.
+
+---
+
+
+---
+
+## 10. Common Problems
+
+### `Contract ABI not found`
+
+Run:
+
+```bash
+cd contracts
+npm run compile
+```
+
+### `Could not connect to RPC endpoint`
+
+Start Hardhat:
+
+```bash
+cd contracts
+npm run node
+```
+
+### `Set PRIVATE_KEY in .env`
+
+Create `.env` and add a local Hardhat private key.
+
+### `record already exists`
+
+This is normal if the same model version was already registered. Change `CHAINPROOF_MODEL_VERSION` in `.env`, rerun `python backend/hash_files.py`, or restart a fresh Hardhat node and redeploy.
+
+### Frontend shows fallback data
+
+The app could not reach the blockchain. Check that:
+
+- Hardhat node is running
+- contract is deployed
+- `artifacts/deployment-latest.json` exists
+- `RPC_URL` is correct
+
+---

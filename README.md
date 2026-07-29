@@ -1,264 +1,100 @@
 # ChainProof - Tamper-Proof AI Model Registry
 
-ChainProof is a small blockchain-based audit system for machine-learning models. It proves that a trained model, its training configuration, and the dataset used during training have not been silently changed after registration.
+ChainProof is a blockchain-based audit system for machine-learning models. It verifies whether a trained model, its configuration, and its dataset have been changed after registration.
 
-The project does **not** store private datasets or model files on the blockchain. Instead, it stores cryptographic fingerprints:
+The project does **not** store datasets or model files on-chain. It stores only:
 
-- `model_hash` - SHA-256 hash of the trained `model.pkl`
-- `config_hash` - SHA-256 hash of the training `config.json`
-- `dataset_merkle_root` - Merkle Root calculated from all CSV dataset rows
-- metadata such as model name, version, wallet address, and timestamp
-
-This makes the blockchain an immutable audit log for model versions.
+- SHA-256 hash of `model.pkl`
+- SHA-256 hash of `config.json`
+- Merkle Root of the dataset
+- model name, version, wallet address, and timestamp
 
 ---
 
-## 1. Project Concept
-
-Companies often train many versions of AI models. Later, it can be difficult to prove which exact model, dataset, and configuration were used. Normal databases can be changed by administrators, so they are not ideal for audit evidence.
-
-ChainProof solves this by registering model proofs on a blockchain:
+## Architecture
 
 ```text
-Dataset + Model + Config
-        |
-        v
-SHA-256 Hashes + Merkle Root
-        |
-        v
-Solidity Smart Contract
-        |
-        v
-Blockchain Registry
-        |
-        v
-Frontend Verification
+Health dataset
+      |
+      v
+Python training pipeline
+      |
+      +--> artifacts/model.pkl
+      +--> artifacts/config.json
+      |
+      v
+SHA-256 hashing + Merkle Tree
+      |
+      +--> model hash
+      +--> config hash
+      +--> dataset Merkle Root
+      |
+      v
+Python Web3 registration
+      |
+      v
+Solidity ModelRegistry smart contract
+      |
+      v
+Local Hardhat blockchain
+      |
+      v
+Streamlit frontend
+      |
+      +--> Registry overview
+      +--> Dataset verification
+      +--> Model/config verification
+      +--> On-chain status
 ```
 
-During verification, the uploaded files are hashed again. If the new values match the on-chain values, the files are authentic. If even one dataset row or one model byte changes, verification fails.
+The blockchain stores only cryptographic proof values and metadata. The original dataset, model, and configuration remain off-chain.
 
 ---
 
-## 2. Current Tech Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| Machine Learning | Python, pandas, scikit-learn | Train the health risk classifier |
-| Hashing | Python hashlib | Create SHA-256 hashes |
-| Dataset Proof | Merkle Tree | Verify dataset integrity efficiently |
-| Blockchain | Solidity, Hardhat, ethers.js | Store immutable registry records |
-| Blockchain Access | web3.py | Register and read model records from Python |
-| Frontend | Streamlit | Dashboard and verification UI |
-| Containerization | Docker, Docker Compose | Run the whole demo more easily |
-
----
-
-## 3. Repository Structure
+## Repository Structure
 
 ```text
 .
 ├── backend/
-│   ├── train_model.py       # Trains the ML model and writes model.pkl/config.json
-│   ├── hash_files.py        # Creates model/config hashes and dataset Merkle Root
-│   ├── merkle_tree.py       # Merkle Tree implementation and proof verification
-│   ├── register_model.py    # Writes the proof values to the smart contract
-│   ├── read_registry.py     # Reads registered records from the smart contract
-│   └── verify_row.py        # CLI check for row-level Merkle verification
-│
+│   ├── train_model.py
+│   ├── hash_files.py
+│   ├── merkle_tree.py
+│   ├── register_model.py
+│   ├── read_registry.py
+│   └── verify_row.py
 ├── contracts/
-│   ├── contracts/ModelRegistry.sol  # Main Solidity smart contract
-│   ├── scripts/deploy.js            # Deploys the contract and saves deployment JSON
-│   ├── test/ModelRegistry.test.js   # Hardhat unit tests
-│   ├── hardhat.config.js            # Local/Sepolia network configuration
-│   └── package.json                 # Hardhat commands and dependencies
-│
+│   ├── contracts/ModelRegistry.sol
+│   ├── scripts/deploy.js
+│   ├── test/ModelRegistry.test.js
+│   ├── hardhat.config.js
+│   └── package.json
 ├── frontend/
-│   ├── app.py       # Streamlit UI
-│   ├── audit.py     # Frontend hashing/Merkle verification helpers
-│   └── chain.py     # Frontend blockchain read access
-│
+│   ├── app.py
+│   ├── audit.py
+│   └── chain.py
 ├── data/
-│   ├── health_dataset_1000.csv  # Main dataset
-│   └── tampered_dataset.csv     # Manipulated dataset for demo failure
-│
-├── artifacts/       # Generated outputs: model, hashes, Merkle tree, deployments
-├── docs/            # Planning/demo documentation
-├── Dockerfile       # Docker image definition
+│   ├── health_dataset_1000.csv
+│   └── tampered_dataset.csv
+├── artifacts/
+├── scripts/docker-entrypoint.sh
+├── Dockerfile
 ├── docker-compose.yml
-├── .env.example     # Example runtime configuration
+├── .env.example
 └── README.md
 ```
 
 ---
 
-## 4. Main Workflow
+## Run with Docker
 
-The normal workflow is:
+Docker is the easiest way to run the complete demo.
 
-```text
-1. Train model
-2. Generate hashes and Merkle Root
-3. Start local blockchain
-4. Deploy smart contract
-5. Register proof values on-chain
-6. Open frontend
-7. Verify original or tampered files
-```
+### Requirements
 
----
-
-## 5. Run Locally Without Docker
-
-### 5.1 Prerequisites
-
-Install:
-
-- Python 3.10 or newer
-- Node.js 18 or newer
-- npm
-- Git
-
-### 5.2 Install Python Dependencies
+- Docker Desktop
+- Docker Compose
 
 From the project root:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate      # Linux/macOS
-# .venv\Scripts\activate       # Windows PowerShell
-
-pip install -r backend/requirements.txt
-pip install -r frontend/requirements.txt
-```
-
-### 5.3 Install Contract Dependencies
-
-```bash
-cd contracts
-npm install
-npm run compile
-npm test
-cd ..
-```
-
-### 5.4 Create `.env`
-
-Copy the example file:
-
-```bash
-cp .env.example .env
-```
-
-On Windows PowerShell:
-
-```powershell
-copy .env.example .env
-```
-
-For local Hardhat testing, use:
-
-```env
-RPC_URL=http://127.0.0.1:8545
-PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-```
-
-This private key is the first default Hardhat local test account. It is safe only for local development. Never use it with real funds.
-
-You can also use `.env` to change the model metadata and file paths without editing the Python code. This is useful if you want to register another model, another version, or another dataset.
-
-```env
-# Model and dataset metadata used by backend/hash_files.py
-CHAINPROOF_MODEL_NAME=Health Risk Classifier
-CHAINPROOF_MODEL_VERSION=1.0.0
-CHAINPROOF_DATASET_PATH=data/health_dataset_1000.csv
-CHAINPROOF_DATASET_NAME=health_dataset_1000.csv
-
-# Generated model/config artifacts
-CHAINPROOF_MODEL_PATH=artifacts/model.pkl
-CHAINPROOF_CONFIG_PATH=artifacts/config.json
-
-# Output files generated by the hashing/Merkle step
-CHAINPROOF_HASHES_PATH=artifacts/hashes.json
-CHAINPROOF_MERKLE_PATH=artifacts/dataset_merkle.json
-
-# Example row index used only for printing a Merkle proof demo
-CHAINPROOF_EXAMPLE_ROW_INDEX=1
-```
-
-For example, to use another dataset/model, change only `.env`:
-
-```env
-CHAINPROOF_MODEL_NAME=Loan Risk Classifier
-CHAINPROOF_MODEL_VERSION=1.0.0
-CHAINPROOF_DATASET_PATH=data/loan_dataset.csv
-CHAINPROOF_DATASET_NAME=loan_dataset.csv
-```
-
-Then rerun:
-
-```bash
-python backend/hash_files.py
-python backend/register_model.py
-```
-
-So the default demo uses `Health Risk Classifier`, but the registry concept is not limited to healthcare data.
-
-### 5.5 Terminal 1 - Start Local Blockchain
-
-```bash
-cd contracts
-npm run node
-```
-
-Keep this terminal open.
-
-### 5.6 Terminal 2 - Deploy Contract
-
-```bash
-cd contracts
-npm run deploy:local
-cd ..
-```
-
-This creates files such as:
-
-```text
-artifacts/deployment-localhost.json
-artifacts/deployment-latest.json
-```
-
-### 5.7 Train, Hash, Register, Read
-
-From the project root:
-
-```bash
-python backend/train_model.py
-python backend/hash_files.py
-python backend/register_model.py
-python backend/read_registry.py
-```
-
-Expected result: the model proof is registered on the local blockchain and can be read back.
-
-### 5.8 Start Frontend
-
-```bash
-streamlit run frontend/app.py
-```
-
-Open the URL shown by Streamlit, usually:
-
-```text
-http://localhost:8501
-```
-
----
-
-## 6. Run With Docker
-
-Docker is the easiest way to run the demo because it starts the local blockchain, deploys the contract, trains the model, registers the proof, and starts the Streamlit UI.
-
-### 6.1 Build and Run With Docker Compose
 
 ```bash
 docker compose up --build
@@ -270,161 +106,243 @@ Then open:
 http://localhost:8501
 ```
 
-The Hardhat RPC is exposed at:
+Do not open `http://0.0.0.0:8501`. That is only the address used by Streamlit inside the container.
 
-```text
-http://localhost:8545
-```
-
-### 6.2 Run With Plain Docker
+To stop the project:
 
 ```bash
-docker build -t chainproof .
-docker run --rm -p 8501:8501 -p 8545:8545 chainproof
+docker compose down
 ```
 
-### 6.3 What the Docker Container Does
+For a completely fresh demo:
 
-The container entrypoint automatically runs:
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+The Docker startup performs the complete workflow:
 
 ```text
-1. npm install / compile smart contract
-2. start Hardhat local node
-3. deploy ModelRegistry.sol
-4. train the ML model
-5. generate hashes and Merkle Root
-6. register the proof on-chain
-7. start Streamlit frontend
+1. Start the local Hardhat blockchain
+2. Compile and deploy the smart contract
+3. Train the machine-learning model
+4. Generate SHA-256 hashes and the dataset Merkle Root
+5. Register the proof values on-chain
+6. Read the registered record
+7. Start the Streamlit frontend
 ```
-
-This is intended for a local demo. For a real deployment, the blockchain node, backend, and frontend should be separated into different services.
 
 ---
 
-## 7. Optional Sepolia Deployment
+## Run Manually
 
-Sepolia is an Ethereum test network. It is **not required** for the project, but it is useful for a more professional demo.
+### Requirements
 
-To use Sepolia, add the following to `.env`:
+- Python 3.10 or newer
+- Node.js 18 or newer
+- npm
 
-```env
-SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
-PRIVATE_KEY=0xYOUR_TEST_WALLET_PRIVATE_KEY
+### 1. Create the Python environment
+
+```bash
+python -m venv .venv
 ```
 
-Then run:
+Linux/macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install the dependencies:
+
+```bash
+pip install -r backend/requirements.txt
+pip install -r frontend/requirements.txt
+```
+
+### 2. Create `.env`
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+copy .env.example .env
+```
+
+For the local Hardhat demo, the important values are:
+
+```env
+RPC_URL=http://127.0.0.1:8545
+PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
+
+The private key above belongs to a default Hardhat development account. Never use it with real funds.
+
+### 3. Install and test the smart contract
 
 ```bash
 cd contracts
-npm run deploy:sepolia
+npm install
+npm run compile
+npm test
+```
+
+### 4. Start the local blockchain
+
+Keep this terminal open:
+
+```bash
+npm run node
+```
+
+### 5. Deploy the contract
+
+Open a second terminal from the project root:
+
+```bash
+cd contracts
+npm run deploy:local
 cd ..
+```
+
+### 6. Train, hash, register, and read
+
+```bash
+python backend/train_model.py
+python backend/hash_files.py
 python backend/register_model.py
 python backend/read_registry.py
 ```
 
-Important:
+### 7. Start the frontend
 
-- Use only a test wallet.
-- Never commit `.env`.
-- You need Sepolia test ETH.
-- The same contract can be deployed locally or on Sepolia.
+```bash
+streamlit run frontend/app.py
+```
+
+Open:
+
+```text
+http://localhost:8501
+```
 
 ---
 
-## 8. Smart Contract Summary
+## Demo Flow
 
-The main contract is:
-
-```text
-contracts/contracts/ModelRegistry.sol
-```
-
-It stores one immutable `ModelRecord` per model version:
+1. Open **On-Chain Status** and confirm that the blockchain and contract are connected.
+2. Open **Registry Overview** and show the registered model version and proof values.
+3. In **Dataset Audit**, upload:
 
 ```text
-recordId
-modelName
-version
-datasetMerkleRoot
-modelHash
-configHash
-registeredBy
-timestamp
+data/health_dataset_1000.csv
 ```
 
-Important functions:
+The verification should pass.
 
-| Function | Purpose |
-|---|---|
-| `registerModel(...)` | Registers one model version |
-| `exists(recordId)` | Checks if a record already exists |
-| `getModel(recordId)` | Reads one registration |
-| `getModelHistory(modelName)` | Lists all versions of one model |
-| `getLatestModel(modelName)` | Returns newest model version |
-| `getAllRecordIds()` | Lists all records for the frontend |
-| `getTotalRecords()` | Returns registry size |
-
-The contract prevents duplicate `recordId` values, so an old model version cannot be overwritten.
-
----
-
-## 9. Frontend Usage
-
-The Streamlit app contains four main areas:
-
-1. **Registry Overview** - shows the registered model information.
-2. **Dataset Audit** - uploads a CSV and compares its Merkle Root to the registered root.
-3. **Model & Config Audit** - uploads `model.pkl` and `config.json` and compares SHA-256 hashes.
-4. **On-Chain Status** - shows RPC connection, contract address, chain ID, block number, and registered IDs.
-
-For the tamper demo, use:
+4. Upload:
 
 ```text
 data/tampered_dataset.csv
 ```
 
-The expected result is verification failure.
+The verification should fail because the Merkle Root is different.
+
+5. In **Model & Config Audit**, upload:
+
+```text
+artifacts/model.pkl
+artifacts/config.json
+```
+
+The hashes should match the values stored on-chain.
 
 ---
 
+## Important Files
+
+`backend/train_model.py` trains the model and creates `artifacts/model.pkl` and `artifacts/config.json`.
+
+`backend/hash_files.py` calculates the model hash, config hash, and dataset Merkle Root.
+
+`backend/register_model.py` registers the proof values in the smart contract.
+
+`contracts/contracts/ModelRegistry.sol` stores immutable model-version records and prevents duplicate record IDs.
+
+`frontend/app.py` provides the Streamlit interface for registry display and verification.
 
 ---
 
-## 10. Common Problems
+## Common Problems
 
-### `Contract ABI not found`
+### `env: 'bash\r': No such file or directory`
 
-Run:
+The file `scripts/docker-entrypoint.sh` has Windows `CRLF` line endings.
+
+Change the file to Unix `LF` line endings and rebuild:
 
 ```bash
-cd contracts
-npm run compile
+docker compose down
+docker compose build --no-cache
+docker compose up
 ```
 
 ### `Could not connect to RPC endpoint`
 
-Start Hardhat:
+Start the Hardhat node:
 
 ```bash
 cd contracts
 npm run node
 ```
 
-### `Set PRIVATE_KEY in .env`
+### `Contract ABI not found`
 
-Create `.env` and add a local Hardhat private key.
+Compile the smart contract:
+
+```bash
+cd contracts
+npm run compile
+```
 
 ### `record already exists`
 
-This is normal if the same model version was already registered. Change `CHAINPROOF_MODEL_VERSION` in `.env`, rerun `python backend/hash_files.py`, or restart a fresh Hardhat node and redeploy.
+The same record ID is already registered. Use a new model version or restart a fresh local blockchain.
 
-### Frontend shows fallback data
+### Docker container exits unexpectedly
 
-The app could not reach the blockchain. Check that:
+Check the logs:
 
-- Hardhat node is running
-- contract is deployed
-- `artifacts/deployment-latest.json` exists
-- `RPC_URL` is correct
+```bash
+docker compose logs --tail=200
+docker compose ps -a
+```
+
+Then try a clean rebuild:
+
+```bash
+docker compose down -v
+docker compose build --no-cache
+docker compose up
+```
 
 ---
+
+## Notes
+
+- The local Hardhat blockchain is used for the project demo.
+- Sepolia deployment is optional.
+- The blockchain proves integrity after registration; it does not prove that the model is accurate or that the original dataset was correct.
